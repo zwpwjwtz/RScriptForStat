@@ -32,7 +32,7 @@ The R Script for exam digit frequency of data in a given XML file
       --help                    - print this help text
  
     Example:
-      ./stat_digit_freq.R --DIGIT 1 --source=./data.xml\n\n") 
+      ./stat_digit_freq.R --digit=1 --source=./data.xml\n\n") 
   quit()
 }
 
