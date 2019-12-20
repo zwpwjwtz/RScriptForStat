@@ -9,13 +9,22 @@ library('ggplot2')
 # pointColor: color of the points
 plotPoints <- function(pointList = list(), 
                        image = ggplot(),
-                       pointColor = "red")
+                       pointColor = "red",
+                       pointFill = "red",
+                       pointShape = 21,
+                       pointSize = 1,
+                       lineWidth = 0.2)
 {
     pointMatrix <- as.data.frame(t(as.data.frame(pointList)))
     colnames(pointMatrix) <- c("dim1", "dim2")
-    image <- image + geom_point(data = pointMatrix, 
-                                aes(dim1, dim2),
-                                color = pointColor)
+    image <- image + 
+                geom_point(data = pointMatrix, 
+                           aes(dim1, dim2),
+                           shape = pointShape,
+                           color = pointColor,
+                           fill = pointFill,
+                           size = pointSize,
+                           stroke = lineWidth)
     
     return(image)
 }

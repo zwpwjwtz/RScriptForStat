@@ -48,7 +48,7 @@ plotBoxNormalDistrib <- function(dataSets, targetFileName,
     p <- ggplot(data = data_melted, aes(x=variable, y=value)) + 
         geom_boxplot(aes(fill=Group),
                      position = position_dodge(1)) + 
-        scale_x_discrete(name=xGroupName) + 
+        scale_x_discrete(name='') + 
         scale_y_continuous(name=yGroupName) + 
         stat_summary(aes(group=Group), fun.y=mean, 
                      col='red', geom='point',
@@ -66,7 +66,7 @@ plotBoxNormalDistrib <- function(dataSets, targetFileName,
                    axis.text.x=element_blank(),
                    axis.ticks.x=element_blank()
     ) 
-    p <- p + guides(fill=guide_legend(title="Cas"))
+    p <- p + guides(fill=guide_legend(title=xGroupName))
     p <- p + ggtitle(titleText)
     
     ggsave(targetFileName, 

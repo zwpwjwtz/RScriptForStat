@@ -1,6 +1,8 @@
-# R script for plotting multiple variables of data set(s)
+# R script for plotting annual variation of data
 
+library('shape')
 source('DateTimeConv.R')
+
 
 # Internal variables for generating colors
 rainbow_default_color_ranges <- c(c(0, 0.12), # Red ~ Orange
@@ -291,6 +293,7 @@ plotDataSets.temporal <- function(dataSets, colors,
             xLimit = c(xLimit, timeRange$max)
         }
         xLimit <- removeInf(xLimit)
+        
         yVarLimit <- yLimit
         if (length(yVarLimit) < 2)
         {
@@ -299,6 +302,7 @@ plotDataSets.temporal <- function(dataSets, colors,
             yVarLimit <- c(yVarLimit, max(data[,yVarNameList[i]]))
         }
         yVarLimit <- removeInf(yVarLimit)
+
         if (is.null(xLimit) | is.null(yVarLimit))
             next
         
@@ -340,7 +344,7 @@ plotDataSets.temporal <- function(dataSets, colors,
             yAxisSide <- 2
             yAxisLine <- 4
         }
-        else if (i == 2)
+        else if (i == 2 && !startsWith(plotFormat, 'v'))
         {
             yAxisSide <- 4
             yAxisLine <- 6
@@ -354,13 +358,44 @@ plotDataSets.temporal <- function(dataSets, colors,
         }
         
         # Draw lines and points
-        lines(x=timeList, 
-              y=data[,yVarNameList[i]],
-              col=colors[i],
-              pch=19,
-              cex=0.3,
-              lwd=2,
-              type=plotFormat)
+        if (startsWith(plotFormat, 'v'))
+        {
+            # For vector plot: see if dataSets contains at least 2 sets 
+            # of data. If so, the first one is seen as vectors' length,
+            # and the second one is seen as vectors' direction (in degree)
+            if (i == 1 && length(yVarNameList >= 2))
+            {
+                # Check if the first two data sets have the same x series
+                if (nrow(dataSets[[1]]) != nrow(dataSets[[2]]))
+                    next
+                
+                lines(x=timeList, 
+                      y=dataSets[[1]][,yVarNameList[1]],
+                      col=colors[1],
+                      pch=19,
+                      cex=0.3,
+                      lwd=2,
+                      type=substring(plotFormat, 2, 2),
+                      lty=2)
+                Arrowhead(x0 = timeList,
+                          y0 = dataSets[[1]][,yVarNameList[1]],
+                          angle = dataSets[[2]][,yVarNameList[2]],
+                          arr.length = 0.4,
+                          arr.width = 0.2,
+                          arr.lwd = 0.05,
+                          arr.col = colors[2])
+            }
+        }
+        else
+        {
+            lines(x=timeList, 
+                  y=data[,yVarNameList[i]],
+                  col=colors[i],
+                  pch=19,
+                  cex=0.3,
+                  lwd=2,
+                  type=plotFormat)
+        }
     }
     
     # Add borders
@@ -423,6 +458,8 @@ plotMultiGraph <- function(dataSetsList, targetFileName,
                            titleTextList=list(), 
                            yLabelList=list(),
                            yLegendList=list(),
+                           colorList=c(),
+                           plotFormatList=c(),
                            ...)
 {
     # Create new plot device
@@ -452,8 +489,15 @@ plotMultiGraph <- function(dataSetsList, targetFileName,
     }
     
     # Set palette
-    colors <- rainbow.comfortable(graphCount)
+    if (length(colorList) > 0)
+        colors <- unlist(colorList)
+    else
+        colors <- rainbow.comfortable(graphCount)
     currentColorIndex <- 1
+    
+    # Set default plot format
+    plotFormatList <- c(plotFormatList, 
+                        rep('b', length(dataSetsList) - length(plotFormatList)))
     
     for (i in seq(1, length(dataSetsList)))
     {
@@ -485,17 +529,20 @@ plotMultiGraph <- function(dataSetsList, targetFileName,
                                   yLimit = yLimit,
                                   yLabelList = yLabelList[[i]],
                                   xAxis = showXAxis,
+                                  plotFormat = plotFormatList[i],
                                   ...)
         else
             plotDataSets.default(dataSets = dataSetsList[[i]], 
                                  colors = colorRange,
                                  xVarNameList = xVarNameList[[i]],
                                  yVarNameList = yVarNameList[[i]],
-                                 yLabelList = yLabelList[[i]], 
+                                 yLabelList = yLabelList[[i]],
+                                 plotFormat = plotFormatList[i],
                                  ...)
         
         # Add legend for each year
-        if (length(yLegendList[[i]]) < length(dataSetsList[[i]]))
+        if (length(yLegendList[[i]]) < length(dataSetsList[[i]]) &&
+            plotFormatList[i] != 'v')
             yLegendList[[i]] <- c(yLegendList[[i]],
                                   yLabelList[[i]]
                                         [seq(length(yLabelList[[i]]) + 1,
@@ -516,4 +563,3 @@ plotMultiGraph <- function(dataSetsList, targetFileName,
     }
     
     dev.off()
-}
