@@ -26,6 +26,12 @@ seqWithRep <- function(from, to, step = 1, length = abs((to - from) / step) + 1)
         step <- -step
     
     newSeq <- seq(from, to, step)
+    if (length(newSeq) == 1)
+    {
+        # Correct the unexpected behavior of sample() when 
+        # the first parameter ("X") has a length of 1
+        newSeq <- c(newSeq, newSeq)
+    }
     duplicates <- sample(newSeq, length - length(newSeq),replace = TRUE)
     newSeq <- c(newSeq, duplicates)
     
@@ -56,6 +62,53 @@ brodeningSeq <- function(var, duplicity = 1, step = 1)
     return(newSeq)
 }
 
+# Helper function for removing outlier points basing on a
+# given list of available points (map)
+removeOutlierPoints <- function(map, pointList)
+{
+    indexes <- c()
+    for (i in seq(1, length(pointList)))
+    {
+        filter <- rep(TRUE, nrow(map))
+        for (j in seq(1, ncol(map)))
+            filter <- filter & (map[,j] == pointList[[i]][j])
+        if (length(which(filter)) > 0)
+            indexes <- c(indexes, i)
+    }
+    if (length(indexes) > 1)
+        pointList[-indexes] <- NULL
+    return(pointList)
+}
+
+# Helper function for generating a matrix of discreate coordinates by 
+# applying "cross-product" to lists of coordinates of different dimensions,
+# and then "melting" the matrix into a simple list of coordinates
+meltMultiDimCoordinates <- function(coordinates=list())
+{
+    dimensionCount <- length(coordinates)
+    
+    # Deal with empty list
+    if (dimensionCount < 1)
+        return(data.frame())
+    
+    # Deal with 1-D coordinates (should be the deepest level of recursion)
+    if (dimensionCount < 2)
+        return(data.frame(coordinates[[1]]))
+    
+    # Deal with inferior dimensions recursively
+    newCoordinates <- data.frame()
+    for (point in coordinates[[1]])
+    {
+        subCoordinates <- meltMultiDimCoordinates(coordinates[2:dimensionCount])
+        newCoordinates <- rbind(newCoordinates,
+                                cbind(point, 
+                                      subCoordinates, 
+                                      deparse.level = 0))
+    }
+    return(newCoordinates)
+}
+
+
 # Generate coordinates of points for sampling
 # area: A vector representing the sampling boundary, e.g. c(0,0,256,256)
 # nodeList: List of coordinates of sampling nodes
@@ -64,7 +117,8 @@ brodeningSeq <- function(var, duplicity = 1, step = 1)
 generateSamplePoints <- function(nodeList=list(),
                                  area=c(-Inf,-Inf,Inf,Inf),
                                  accuracy=c(1,1),
-                                 radius=c(1,1))
+                                 radius=c(1,1),
+                                 referenceMap=NULL)
 {
     # Adjust boundaries for sampling nodes
     adjusted_nodes <- list()
@@ -101,42 +155,89 @@ generateSamplePoints <- function(nodeList=list(),
         # along the center line (defined by sampling nodes)
         sampling_count <- max(abs(upper_bound - lower_bound) / accuracy + 1)
         
-        # Calculate coordinate for each dimension
+        # Calculate centroid coordinates for each dimension
         coordinates <- c()
+        dimensionOrder <- c() # TRUE = Ascending, FALSE = Decending
         for (j in seq(1, dimension_count))
         {
-            # Calculate primary coordinates along the center line
+            # Get coordinates' order of this dimension
+            if (lower_bound[j] < upper_bound[j])
+                dimensionOrder <- c(dimensionOrder, TRUE)
+            else
+                dimensionOrder <- c(dimensionOrder, FALSE)
+            
+            # Generate replicates for each coordinates
             coordinates_1D <- seqWithRep(lower_bound[j], upper_bound[j],
                                          accuracy[j], sampling_count)
-            
-            # Calculate bordened coordinates
-            coordinates_1D <- brodeningSeq(coordinates_1D, 
-                                           duplicity[j],
-                                           accuracy[j])
-            
-            # Calculate duplicates - critical for alignate coordinates
-            coordinates_1D_duplicates <- 
-                        prod(duplicity[seq(1, dimension_count) != j] * 2 - 1)
-            coordinates_1D <- rep(coordinates_1D,
-                                  each = coordinates_1D_duplicates)
-            
-            # Append the coordinates of this dimension to the whole matrix
             coordinates <- cbind(coordinates, coordinates_1D)
         }
-        
-        sample_point_matrix <- rbind(sample_point_matrix, coordinates)
+            
+        # Calculate bordened coordinates for each centroid coordinate
+        for (j in seq(1, sampling_count))
+        {
+            coordinates_1D <- list()
+            for (k in seq(1, dimension_count))
+            {
+                coordinate <- coordinates[j, k]
+                coordinates_1D <- c(coordinates_1D,
+                                    list(brodeningSeq(coordinate, 
+                                                      duplicity[k],
+                                                      accuracy[k])))
+            }
+            
+            # Generate point coordinates of all the dimensions
+            sample_point_matrix <- 
+                    rbind(sample_point_matrix, 
+                          meltMultiDimCoordinates(coordinates_1D))
+        }
     }
     
     # Remove duplicated coordinates (lines)
-    sample_point_matrix <- unique.matrix(sample_point_matrix, MARGIN = 1)
-    # colnames(sample_point_matrix) <- paste0("dim", seq(1, dimension_count))
-    
+    if (ncol(sample_point_matrix) > 1)
+        sample_point_matrix <- unique.matrix(sample_point_matrix, MARGIN = 1)
+    else
+        sample_point_matrix <- unique(sample_point_matrix)
+    colnames(sample_point_matrix) <- paste0("dim", seq(1, dimension_count))
+
     # Convert matrix to list
-    sample_point_list <- split(sample_point_matrix, 
-                               rep(1:nrow(sample_point_matrix)))
+    sample_point_list <- list()
+    for (i in seq(1, nrow(sample_point_matrix)))
+    {
+        sample_point_list <- c(sample_point_list,
+                               list(unlist(sample_point_matrix[i,])))
+    }
     
-    return(sample_point_list)
+    if (is.null(referenceMap))
+        return(sample_point_list)
+    else
+        return(removeOutlierPoints(referenceMap, sample_point_list))
 }
+
+# Get indexes of points that are present in a given list (map)
+# map: a list of coordinates of availabel points
+# pointList: a list of coordiantes to search for
+getPointIndexes <- function(map, pointList)
+{
+    indexes <- c()
+    for (i in seq(1, length(pointList)))
+    {
+        filter <- rep(TRUE, nrow(map))
+        for (j in seq(1, ncol(map)))
+            filter <- filter & (map[,j] == pointList[[i]][j])
+        selectedIndexes <- which(filter)
+        if (length(selectedIndexes) > 0)
+        {
+            # Deal with replicates
+            # Currently we only take the first one of the same point
+            if (length(selectedIndexes) > 1)
+                indexes <- c(indexes, selectedIndexes[1])
+            else
+                indexes <- c(indexes, selectedIndexes)
+        }
+    }
+    return(indexes)
+}
+
 
 # Main entry for test
 # 
